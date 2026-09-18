@@ -54,6 +54,10 @@ def base_ydl_opts() -> dict:
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
+        # Force IPv4. Instagram and other dual-stack CDNs advertise AAAA records,
+        # and a host without an IPv6 route fails them with "Network is unreachable"
+        # instead of falling back. Every one of these hosts is reachable over IPv4.
+        "source_address": "0.0.0.0",
     }
     cookies_file = resolve_cookies_file()
     if cookies_file:
