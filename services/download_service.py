@@ -10,10 +10,10 @@ logger = logging.getLogger(__name__)
 # playable ones, and a DRM hit should cost a retry rather than the whole search.
 SEARCH_CANDIDATE_COUNT = 6
 
-# SoundCloud first: YouTube still serves search metadata from datacenter IPs but
-# refuses the player request needed to actually download. YouTube stays as a
-# fallback because its catalogue is the deeper of the two.
-SEARCH_PREFIXES = ("scsearch", "ytsearch")
+# YouTube first: it has the deeper catalogue and works from a clean IP. SoundCloud
+# stays as a fallback, though it is unreachable from Uzbekistan, so it only ever
+# helps a deployment hosted elsewhere.
+SEARCH_PREFIXES = ("ytsearch", "scsearch")
 
 _BOT_CHECK_MARKERS = ("sign in to confirm", "not a bot", "confirm your age")
 _DRM_MARKERS = ("drm protected", "drm-protected")
