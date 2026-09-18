@@ -1,10 +1,10 @@
 import asyncio
 import logging
 from aiogram import Router, types, Bot
-from aiogram.filters import Command
+from aiogram.filters import Command, CommandObject
 from config import ADMIN_IDS
 from database import get_users_count, get_tracks_count, get_top_tracks, get_all_user_ids
-from services.diagnostics import collect_diagnostics
+from services.diagnostics import collect_diagnostics, probe_sources
 
 logger = logging.getLogger(__name__)
 router = Router(name="admin_router")
@@ -54,6 +54,30 @@ async def cmd_diagnostics(message: types.Message):
     except Exception as e:
         logger.error("Diagnostics failed: %s", e, exc_info=True)
         await status_msg.edit_text(f"⚠️ Diagnostika bajarilmadi: {e}")
+        return
+
+    await status_msg.edit_text(report, parse_mode="HTML")
+
+
+@router.message(Command("probe"))
+async def cmd_probe(message: types.Message, command: CommandObject):
+    if not is_admin(message.from_user.id):
+        return
+
+    query = (command.args or "").strip()
+    if not query:
+        await message.reply(
+            "Manbalarni solishtirish uchun: <code>/probe Konsta Sengacha</code>",
+            parse_mode="HTML",
+        )
+        return
+
+    status_msg = await message.reply("🔎 Manbalar tekshirilmoqda...")
+    try:
+        report = await probe_sources(query)
+    except Exception as e:
+        logger.error("Probe failed for %r: %s", query, e, exc_info=True)
+        await status_msg.edit_text(f"⚠️ Tekshiruv bajarilmadi: {e}")
         return
 
     await status_msg.edit_text(report, parse_mode="HTML")

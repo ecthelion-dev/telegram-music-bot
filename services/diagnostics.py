@@ -17,6 +17,7 @@ PROBE_QUERY = "ytsearch1:music"
 POT_PLUGIN_MODULE = "yt_dlp_plugins.extractor.getpot_bgutil_script"
 NODE_TIMEOUT_SECONDS = 10
 ERROR_EXCERPT_LIMIT = 300
+PROBE_RESULT_LIMIT = 5
 
 
 def _node_version() -> str:
@@ -103,3 +104,41 @@ def _collect() -> str:
 async def collect_diagnostics() -> str:
     """Report what this deployment actually has, so remote debugging is not guesswork."""
     return await asyncio.to_thread(_collect)
+
+
+def _search_probe(prefix: str, query: str) -> str:
+    # Flat extraction: the question is what each catalogue holds, not whether every
+    # hit is downloadable, and resolving each entry in full would be far slower.
+    opts = {**base_ydl_opts(), "skip_download": True, "extract_flat": "in_playlist"}
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            info = ydl.extract_info(f"{prefix}{PROBE_RESULT_LIMIT}:{query}", download=False)
+    except Exception as e:
+        return f"❌ {html.escape(str(e)[:ERROR_EXCERPT_LIMIT])}"
+
+    entries = [entry for entry in (info or {}).get("entries") or [] if entry]
+    if not entries:
+        return "➖ natija yo‘q"
+
+    return "\n".join(
+        f"• {html.escape((entry.get('uploader') or entry.get('channel') or '?')[:20])}"
+        f" — {html.escape((entry.get('title') or '?')[:45])}"
+        for entry in entries
+    )
+
+
+def _probe(query: str) -> str:
+    return "\n".join([
+        f"🔎 <b>{html.escape(query)}</b>",
+        "",
+        "<b>YouTube:</b>",
+        _search_probe("ytsearch", query),
+        "",
+        "<b>SoundCloud:</b>",
+        _search_probe("scsearch", query),
+    ])
+
+
+async def probe_sources(query: str) -> str:
+    """Show what each catalogue holds for a query, to compare sources before switching."""
+    return await asyncio.to_thread(_probe, query)
