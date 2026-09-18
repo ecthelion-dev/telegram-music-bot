@@ -1,0 +1,10 @@
+.env
+venv/
+downloads/
+temp/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+bot_database.db
