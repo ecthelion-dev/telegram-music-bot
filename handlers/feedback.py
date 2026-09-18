@@ -8,6 +8,7 @@ _MESSAGES = {
     "too_long": "⚠️ Ushbu audio juda uzun. Faqat qisqaroq musiqiy treklarni yuklay olaman.",
     "bot_check": "🚫 YouTube so‘rovni bloklamoqda (bot tekshiruvi). Administrator cookies yoki proxy sozlashi kerak.",
     "unavailable": "❌ Ushbu video mavjud emas yoki yopiq (private).",
+    "drm": "🔒 Topilgan yozuvlar DRM bilan himoyalangan (obuna talab qiladi). Boshqa nom bilan qidirib ko‘ring.",
     "download_failed": "❌ Audioni yuklab olishda xatolik yuz berdi.",
 }
 

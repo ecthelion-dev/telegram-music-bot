@@ -19,6 +19,7 @@ POT_PLUGIN_MODULE = "yt_dlp_plugins.extractor.getpot_bgutil_script"
 NODE_TIMEOUT_SECONDS = 10
 ERROR_EXCERPT_LIMIT = 300
 PROBE_RESULT_LIMIT = 5
+DRM_MARKERS = ("drm protected", "drm-protected")
 
 
 def _node_version() -> str:
@@ -114,12 +115,28 @@ async def collect_diagnostics() -> str:
     return await asyncio.to_thread(_collect)
 
 
-def _search_probe(prefix: str, query: str) -> str:
-    # Flat extraction: the question is what each catalogue holds, not whether every
-    # hit is downloadable, and resolving each entry in full would be far slower.
-    opts = {**base_ydl_opts(), "skip_download": True, "extract_flat": "in_playlist"}
+def _entry_status(ydl: yt_dlp.YoutubeDL, entry: dict) -> str:
+    """Whether this hit could actually be downloaded, not merely that it is listed."""
+    url = entry.get("url") or entry.get("webpage_url")
+    if not url:
+        return "❔"
     try:
-        with yt_dlp.YoutubeDL(opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+    except Exception as e:
+        lowered = str(e).lower()
+        return "🔒" if any(marker in lowered for marker in DRM_MARKERS) else "❌"
+
+    audio_formats = [
+        fmt for fmt in (info or {}).get("formats", [])
+        if fmt.get("acodec") not in (None, "none")
+    ]
+    return "✅" if audio_formats else "❌"
+
+
+def _search_probe(prefix: str, query: str) -> str:
+    list_opts = {**base_ydl_opts(), "skip_download": True, "extract_flat": "in_playlist"}
+    try:
+        with yt_dlp.YoutubeDL(list_opts) as ydl:
             info = ydl.extract_info(f"{prefix}{PROBE_RESULT_LIMIT}:{query}", download=False)
     except Exception as e:
         return f"❌ {html.escape(str(e)[:ERROR_EXCERPT_LIMIT])}"
@@ -128,11 +145,14 @@ def _search_probe(prefix: str, query: str) -> str:
     if not entries:
         return "➖ natija yo‘q"
 
-    return "\n".join(
-        f"• {html.escape((entry.get('uploader') or entry.get('channel') or '?')[:20])}"
-        f" — {html.escape((entry.get('title') or '?')[:45])}"
-        for entry in entries
-    )
+    check_opts = {**base_ydl_opts(), "skip_download": True}
+    with yt_dlp.YoutubeDL(check_opts) as ydl:
+        return "\n".join(
+            f"{_entry_status(ydl, entry)} "
+            f"{html.escape((entry.get('uploader') or entry.get('channel') or '?')[:20])}"
+            f" — {html.escape((entry.get('title') or '?')[:45])}"
+            for entry in entries
+        )
 
 
 def _probe(query: str) -> str:
@@ -144,6 +164,8 @@ def _probe(query: str) -> str:
         "",
         "<b>SoundCloud:</b>",
         _search_probe("scsearch", query),
+        "",
+        "<i>✅ yuklanadi · 🔒 DRM · ❌ bloklangan</i>",
     ])
 
 

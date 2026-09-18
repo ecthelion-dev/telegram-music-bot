@@ -6,7 +6,9 @@ from services.cookies import resolve_cookies_file
 
 logger = logging.getLogger(__name__)
 
-SEARCH_CANDIDATE_COUNT = 3
+# Several candidates per source: SoundCloud mixes DRM-locked uploads in with
+# playable ones, and a DRM hit should cost a retry rather than the whole search.
+SEARCH_CANDIDATE_COUNT = 6
 
 # SoundCloud first: YouTube still serves search metadata from datacenter IPs but
 # refuses the player request needed to actually download. YouTube stays as a
@@ -14,6 +16,7 @@ SEARCH_CANDIDATE_COUNT = 3
 SEARCH_PREFIXES = ("scsearch", "ytsearch")
 
 _BOT_CHECK_MARKERS = ("sign in to confirm", "not a bot", "confirm your age")
+_DRM_MARKERS = ("drm protected", "drm-protected")
 _UNAVAILABLE_MARKERS = (
     "unavailable",
     "private video",
@@ -61,6 +64,8 @@ def _classify_error(exc: Exception) -> dict:
     lowered = message.lower()
     if any(marker in lowered for marker in _BOT_CHECK_MARKERS):
         return {"error": "bot_check", "detail": message}
+    if any(marker in lowered for marker in _DRM_MARKERS):
+        return {"error": "drm", "detail": message}
     if any(marker in lowered for marker in _UNAVAILABLE_MARKERS):
         return {"error": "unavailable", "detail": message}
     return {"error": "download_failed", "detail": message}
