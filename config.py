@@ -31,3 +31,7 @@ MAX_DURATION_SECONDS = int(os.getenv("MAX_DURATION_SECONDS", "900"))
 # residential ones, so a cloud deployment may need cookies or an outbound proxy.
 YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "").strip()
 YTDLP_PROXY = os.getenv("YTDLP_PROXY", "").strip()
+
+# Checkout directory of bgutil-ytdlp-pot-provider, which mints the proof-of-origin
+# token YouTube demands from datacenter IPs. The Dockerfile builds it and sets this.
+POT_PROVIDER_HOME = os.getenv("POT_PROVIDER_HOME", "").strip()

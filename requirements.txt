@@ -1,5 +1,6 @@
 aiogram>=3.13.0
 shazamio>=0.6.0
 yt-dlp>=2024.8.6
+bgutil-ytdlp-pot-provider>=2.0.0
 aiosqlite>=0.20.0
 python-dotenv>=1.0.1

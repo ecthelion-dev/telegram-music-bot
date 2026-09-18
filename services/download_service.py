@@ -1,7 +1,13 @@
 import asyncio
 import logging
 import yt_dlp
-from config import DOWNLOAD_DIR, MAX_DURATION_SECONDS, YTDLP_COOKIES_FILE, YTDLP_PROXY
+from config import (
+    DOWNLOAD_DIR,
+    MAX_DURATION_SECONDS,
+    POT_PROVIDER_HOME,
+    YTDLP_COOKIES_FILE,
+    YTDLP_PROXY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +48,10 @@ def _base_ydl_opts() -> dict:
         opts = {**opts, "cookiefile": YTDLP_COOKIES_FILE}
     if YTDLP_PROXY:
         opts = {**opts, "proxy": YTDLP_PROXY}
+    if POT_PROVIDER_HOME:
+        opts = {**opts, "extractor_args": {
+            "youtubepot-bgutilscript": {"server_home": [POT_PROVIDER_HOME]},
+        }}
     return opts
 
 
