@@ -1,10 +1,12 @@
 FROM python:3.12-slim
 
-# Install system dependencies (FFmpeg is required for yt-dlp & audio conversion)
+# Install system dependencies (FFmpeg is required for yt-dlp, nodejs for signature extraction)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     curl \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
+
 
 WORKDIR /app
 

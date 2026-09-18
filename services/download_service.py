@@ -24,54 +24,51 @@ def _sync_search_and_download(query: str) -> dict | None:
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        "default_search": "ytsearch1",
+        "default_search": "ytsearch3",
         "extractor_args": {
             "youtube": {
                 "player_client": ["android", "ios", "mweb"]
             }
         },
     }
-
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Search YouTube for top 1 match
-            info = ydl.extract_info(f"ytsearch1:{query}", download=False)
-            if not info:
+            # Search YouTube for top 3 matches to allow fallback if #1 is unavailable
+            info = ydl.extract_info(f"ytsearch3:{query}", download=False)
+            if not info or not info.get("entries"):
                 return None
             
-            entries = info.get("entries")
-            if not entries:
-                return None
-            
-            entry = entries[0]
-            duration = entry.get("duration") or 0
-            
-            if duration > MAX_DURATION_SECONDS:
-                logger.warning("Track too long (%s seconds): %s", duration, query)
-                return {"error": "too_long", "duration": duration}
-            
-            # Now download
-            ydl.process_ie_result(entry, download=True)
-            
-            # Expected MP3 path
-            video_id = entry.get("id")
-            final_mp3_path = DOWNLOAD_DIR / f"{video_id}.mp3"
-            
-            title = entry.get("title", query)
-            artist = entry.get("uploader") or entry.get("channel") or ""
-            
-            return {
-                "title": title,
-                "artist": artist,
-                "duration": duration,
-                "file_path": str(final_mp3_path),
-                "thumbnail": entry.get("thumbnail"),
-                "webpage_url": entry.get("webpage_url")
-            }
+            for entry in info["entries"]:
+                if not entry:
+                    continue
+                duration = entry.get("duration") or 0
+                if duration > MAX_DURATION_SECONDS:
+                    continue
+                try:
+                    ydl.process_ie_result(entry, download=True)
+                    video_id = entry.get("id")
+                    final_mp3_path = DOWNLOAD_DIR / f"{video_id}.mp3"
+                    
+                    if final_mp3_path.exists():
+                        title = entry.get("title", query)
+                        artist = entry.get("uploader") or entry.get("channel") or ""
+                        return {
+                            "title": title,
+                            "artist": artist,
+                            "duration": duration,
+                            "file_path": str(final_mp3_path),
+                            "thumbnail": entry.get("thumbnail"),
+                            "webpage_url": entry.get("webpage_url")
+                        }
+                except Exception as dl_err:
+                    logger.warning("Could not download candidate %s: %s", entry.get("id"), dl_err)
+                    continue
+            return None
     except Exception as e:
         logger.error("Error in yt-dlp download: %s", e, exc_info=True)
         return None
+
 
 async def download_track_by_query(query: str) -> dict | None:
     """
