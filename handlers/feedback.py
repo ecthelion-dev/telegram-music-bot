@@ -9,6 +9,7 @@ _MESSAGES = {
     "bot_check": "🚫 YouTube so‘rovni bloklamoqda (bot tekshiruvi). Administrator cookies yoki proxy sozlashi kerak.",
     "unavailable": "❌ Ushbu video mavjud emas yoki yopiq (private).",
     "drm": "🔒 Topilgan yozuvlar DRM bilan himoyalangan (obuna talab qiladi). Boshqa nom bilan qidirib ko‘ring.",
+    "network": "🌐 Manba serveriga ulanib bo‘lmadi. Bu ba’zi Instagram havolalarida uchraydi — qo‘shiq nomini yozib qidirib ko‘ring.",
     "download_failed": "❌ Audioni yuklab olishda xatolik yuz berdi.",
 }
 

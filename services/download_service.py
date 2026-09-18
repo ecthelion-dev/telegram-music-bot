@@ -22,6 +22,13 @@ AUDIO_EXTENSIONS = (".m4a", ".mp3", ".opus", ".ogg", ".webm", ".mp4")
 
 _BOT_CHECK_MARKERS = ("sign in to confirm", "not a bot", "confirm your age")
 _DRM_MARKERS = ("drm protected", "drm-protected")
+_NETWORK_MARKERS = (
+    "network is unreachable",
+    "timed out",
+    "connection reset",
+    "connection refused",
+    "connection aborted",
+)
 _UNAVAILABLE_MARKERS = (
     "unavailable",
     "private video",
@@ -78,6 +85,8 @@ def _classify_error(exc: Exception) -> dict:
         return {"error": "bot_check", "detail": message}
     if any(marker in lowered for marker in _DRM_MARKERS):
         return {"error": "drm", "detail": message}
+    if any(marker in lowered for marker in _NETWORK_MARKERS):
+        return {"error": "network", "detail": message}
     if any(marker in lowered for marker in _UNAVAILABLE_MARKERS):
         return {"error": "unavailable", "detail": message}
     return {"error": "download_failed", "detail": message}
