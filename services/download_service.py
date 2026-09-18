@@ -25,7 +25,13 @@ def _sync_search_and_download(query: str) -> dict | None:
         "quiet": True,
         "no_warnings": True,
         "default_search": "ytsearch1",
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios", "mweb"]
+            }
+        },
     }
+
     
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -89,7 +95,13 @@ def _sync_download_url(url: str) -> dict | None:
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "ios", "mweb"]
+            }
+        },
     }
+
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
             info = ydl.extract_info(url, download=True)
