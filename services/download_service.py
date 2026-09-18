@@ -1,5 +1,7 @@
 import asyncio
 import logging
+from pathlib import Path
+
 import yt_dlp
 from config import DOWNLOAD_DIR, MAX_DURATION_SECONDS, POT_PROVIDER_HOME, YTDLP_PROXY
 from services.cookies import resolve_cookies_file
@@ -14,6 +16,9 @@ SEARCH_CANDIDATE_COUNT = 6
 # stays as a fallback, though it is unreachable from Uzbekistan, so it only ever
 # helps a deployment hosted elsewhere.
 SEARCH_PREFIXES = ("ytsearch", "scsearch")
+
+# Ordered by preference, since the postprocessor's output extension varies.
+AUDIO_EXTENSIONS = (".m4a", ".mp3", ".opus", ".ogg", ".webm", ".mp4")
 
 _BOT_CHECK_MARKERS = ("sign in to confirm", "not a bot", "confirm your age")
 _DRM_MARKERS = ("drm protected", "drm-protected")
@@ -35,12 +40,15 @@ def base_ydl_opts() -> dict:
     first on datacenter IPs.
     """
     opts = {
-        "format": "bestaudio/best",
+        # Prefer the AAC stream YouTube already serves: re-encoding it to MP3 cost
+        # ~4.6s a track on this host, whose emulated CPU has no SSE4.2 or AVX for
+        # ffmpeg to use. Matching the source codec lets the postprocessor remux
+        # rather than re-encode, and it only really encodes on the rare fallback.
+        "format": "bestaudio[ext=m4a]/bestaudio/best",
         "outtmpl": str(DOWNLOAD_DIR / "%(id)s.%(ext)s"),
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "192",
+            "preferredcodec": "m4a",
         }],
         "noplaylist": True,
         "quiet": True,
@@ -71,17 +79,26 @@ def _classify_error(exc: Exception) -> dict:
     return {"error": "download_failed", "detail": message}
 
 
+def _find_audio_file(track_id: str) -> Path | None:
+    """Locate the file yt-dlp produced; its extension depends on the chosen source."""
+    for extension in AUDIO_EXTENSIONS:
+        candidate = DOWNLOAD_DIR / f"{track_id}{extension}"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def _build_track(entry: dict, fallback_title: str = "", source_url: str = "") -> dict | None:
-    """Map a finished yt-dlp entry onto a track dict, or None if no MP3 was produced."""
-    mp3_path = DOWNLOAD_DIR / f"{entry.get('id')}.mp3"
-    if not mp3_path.exists():
+    """Map a finished yt-dlp entry onto a track dict, or None if no audio was produced."""
+    audio_path = _find_audio_file(str(entry.get("id")))
+    if not audio_path:
         return None
 
     return {
         "title": entry.get("title") or fallback_title or "Audio trek",
         "artist": entry.get("uploader") or entry.get("creator") or entry.get("channel") or "",
         "duration": entry.get("duration") or 0,
-        "file_path": str(mp3_path),
+        "file_path": str(audio_path),
         "thumbnail": entry.get("thumbnail"),
         "webpage_url": entry.get("webpage_url") or source_url,
     }

@@ -54,7 +54,7 @@ async def handle_social_media_link(message: types.Message, bot: Bot):
         artist = result.get("artist", "")
         duration = result.get("duration", 0)
 
-        audio_file = FSInputFile(mp3_path, filename=f"{title}.mp3")
+        audio_file = FSInputFile(mp3_path, filename=f"{title}{os.path.splitext(mp3_path)[1]}")
         sent_audio = await message.reply_audio(
             audio=audio_file,
             title=title,

@@ -46,7 +46,11 @@ async def handle_text_search(message: types.Message, bot: Bot):
         artist = download_result.get("artist", "")
         duration = download_result.get("duration", 0)
 
-        audio_file = FSInputFile(mp3_path, filename=f"{artist} - {title}.mp3" if artist else f"{title}.mp3")
+        extension = os.path.splitext(mp3_path)[1]
+        audio_file = FSInputFile(
+            mp3_path,
+            filename=f"{artist} - {title}{extension}" if artist else f"{title}{extension}",
+        )
         sent_audio = await message.reply_audio(
             audio=audio_file,
             title=title,

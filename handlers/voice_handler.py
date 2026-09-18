@@ -80,7 +80,7 @@ async def handle_audio_recognition(message: types.Message, bot: Bot):
             return
 
         # Send MP3 to user
-        audio_file = FSInputFile(mp3_path, filename=f"{artist} - {title}.mp3")
+        audio_file = FSInputFile(mp3_path, filename=f"{artist} - {title}{os.path.splitext(mp3_path)[1]}")
         sent_audio = await message.reply_audio(
             audio=audio_file,
             title=title,
