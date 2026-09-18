@@ -6,7 +6,6 @@ from aiogram import Router, types, F, Bot
 from aiogram.types import FSInputFile
 from aiogram.enums import ChatAction
 from config import TEMP_DIR
-from services.shazam_service import recognize_audio_file
 from services.download_service import download_track_by_query
 from handlers.feedback import format_error
 from database import get_cached_track, save_track
@@ -31,7 +30,10 @@ async def handle_audio_recognition(message: types.Message, bot: Bot):
         # 2. Download file to temp
         await bot.download(telegram_file, destination=temp_file_path)
 
-        # 3. Recognize via Shazam
+        # Imported here, not at module scope: shazamio pulls in numpy, which costs
+        # ~18 MB that a bot serving only text searches would never use.
+        from services.shazam_service import recognize_audio_file
+
         track_info = await recognize_audio_file(str(temp_file_path))
 
         if not track_info:
