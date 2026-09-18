@@ -4,6 +4,7 @@ from aiogram import Router, types, Bot
 from aiogram.filters import Command
 from config import ADMIN_IDS
 from database import get_users_count, get_tracks_count, get_top_tracks, get_all_user_ids
+from services.diagnostics import collect_diagnostics
 
 logger = logging.getLogger(__name__)
 router = Router(name="admin_router")
@@ -41,6 +42,22 @@ async def cmd_admin_stats(message: types.Message):
     )
 
     await message.answer(stats_text, parse_mode="HTML")
+
+@router.message(Command("diag"))
+async def cmd_diagnostics(message: types.Message):
+    if not is_admin(message.from_user.id):
+        return
+
+    status_msg = await message.reply("🔬 Tekshirilmoqda...")
+    try:
+        report = await collect_diagnostics()
+    except Exception as e:
+        logger.error("Diagnostics failed: %s", e, exc_info=True)
+        await status_msg.edit_text(f"⚠️ Diagnostika bajarilmadi: {e}")
+        return
+
+    await status_msg.edit_text(report, parse_mode="HTML")
+
 
 @router.message(Command("broadcast"))
 async def cmd_broadcast(message: types.Message, bot: Bot):

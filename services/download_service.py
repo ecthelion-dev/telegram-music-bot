@@ -23,7 +23,7 @@ _UNAVAILABLE_MARKERS = (
 )
 
 
-def _base_ydl_opts() -> dict:
+def base_ydl_opts() -> dict:
     """
     yt-dlp options shared by search and direct-URL downloads.
 
@@ -84,7 +84,7 @@ def _build_track(entry: dict, fallback_title: str = "", source_url: str = "") ->
 def _sync_search_and_download(query: str) -> dict:
     """Search YouTube and download the first usable match. Runs in a worker thread."""
     try:
-        with yt_dlp.YoutubeDL(_base_ydl_opts()) as ydl:
+        with yt_dlp.YoutubeDL(base_ydl_opts()) as ydl:
             info = ydl.extract_info(
                 f"ytsearch{SEARCH_CANDIDATE_COUNT}:{query}", download=False
             )
@@ -128,7 +128,7 @@ def _sync_search_and_download(query: str) -> dict:
 def _sync_download_url(url: str) -> dict:
     """Download audio straight from a link (YouTube, Instagram, TikTok). Runs in a worker thread."""
     try:
-        with yt_dlp.YoutubeDL(_base_ydl_opts()) as ydl:
+        with yt_dlp.YoutubeDL(base_ydl_opts()) as ydl:
             info = ydl.extract_info(url, download=True)
             if not info:
                 return {"error": "download_failed", "detail": "yt-dlp returned no metadata"}
