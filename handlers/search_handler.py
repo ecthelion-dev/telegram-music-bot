@@ -4,6 +4,7 @@ from aiogram import Router, types, F, Bot
 from aiogram.types import FSInputFile
 from aiogram.enums import ChatAction
 from services.download_service import download_track_by_query
+from handlers.feedback import format_error
 from database import get_cached_track, save_track
 
 logger = logging.getLogger(__name__)
@@ -32,12 +33,8 @@ async def handle_text_search(message: types.Message, bot: Bot):
     try:
         download_result = await download_track_by_query(query)
 
-        if not download_result:
-            await status_msg.edit_text("😔 Hech narsa topilmadi. Qo‘shiq yoki ijrochi nomini to‘g‘ri yozganingizga ishonch hosil qiling.")
-            return
-
-        if download_result.get("error") == "too_long":
-            await status_msg.edit_text("⚠️ Ushbu audio juda uzun (15 daqiqadan ortiq). Faqat musiqiy treklarni yuklay olaman.")
+        if download_result.get("error"):
+            await status_msg.edit_text(format_error(download_result, message.from_user.id))
             return
 
         mp3_path = download_result.get("file_path")

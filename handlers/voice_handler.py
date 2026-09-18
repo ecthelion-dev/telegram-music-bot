@@ -8,6 +8,7 @@ from aiogram.enums import ChatAction
 from config import TEMP_DIR
 from services.shazam_service import recognize_audio_file
 from services.download_service import download_track_by_query
+from handlers.feedback import format_error
 from database import get_cached_track, save_track
 
 logger = logging.getLogger(__name__)
@@ -67,12 +68,8 @@ async def handle_audio_recognition(message: types.Message, bot: Bot):
         # 5. Not in cache -> Download via YouTube (yt-dlp)
         download_result = await download_track_by_query(query)
 
-        if not download_result:
-            await status_msg.edit_text("❌ Qo‘shiq topildi, lekin audioni yuklab olishda xatolik yuz berdi.")
-            return
-
-        if download_result.get("error") == "too_long":
-            await status_msg.edit_text("⚠️ Ushbu audio juda uzun (15 daqiqadan ko‘p). Faqat qisqaroq treklarni yuklay olaman.")
+        if download_result.get("error"):
+            await status_msg.edit_text(format_error(download_result, message.from_user.id))
             return
 
         mp3_path = download_result.get("file_path")

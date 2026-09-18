@@ -1,21 +1,33 @@
 import asyncio
 import logging
-from pathlib import Path
 import yt_dlp
-from config import DOWNLOAD_DIR, MAX_DURATION_SECONDS
+from config import DOWNLOAD_DIR, MAX_DURATION_SECONDS, YTDLP_COOKIES_FILE, YTDLP_PROXY
 
 logger = logging.getLogger(__name__)
 
-def _sync_search_and_download(query: str) -> dict | None:
+SEARCH_CANDIDATE_COUNT = 3
+
+_BOT_CHECK_MARKERS = ("sign in to confirm", "not a bot", "confirm your age")
+_UNAVAILABLE_MARKERS = (
+    "unavailable",
+    "private video",
+    "removed by the uploader",
+    "members-only",
+    "does not exist",
+)
+
+
+def _base_ydl_opts() -> dict:
     """
-    Synchronous function that uses yt-dlp to search and download the top audio match.
-    Runs inside asyncio thread pool.
+    yt-dlp options shared by search and direct-URL downloads.
+
+    Deliberately does not pin `player_client`: overriding it strips the modern
+    audio-only formats and leaves only legacy format 18, which YouTube blocks
+    first on datacenter IPs.
     """
-    outtmpl = str(DOWNLOAD_DIR / "%(id)s.%(ext)s")
-    
-    ydl_opts = {
+    opts = {
         "format": "bestaudio/best",
-        "outtmpl": outtmpl,
+        "outtmpl": str(DOWNLOAD_DIR / "%(id)s.%(ext)s"),
         "postprocessors": [{
             "key": "FFmpegExtractAudio",
             "preferredcodec": "mp3",
@@ -24,115 +36,113 @@ def _sync_search_and_download(query: str) -> dict | None:
         "noplaylist": True,
         "quiet": True,
         "no_warnings": True,
-        "default_search": "ytsearch3",
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "ios", "mweb"]
-            }
-        },
+        "noprogress": True,
     }
-    
+    if YTDLP_COOKIES_FILE:
+        opts = {**opts, "cookiefile": YTDLP_COOKIES_FILE}
+    if YTDLP_PROXY:
+        opts = {**opts, "proxy": YTDLP_PROXY}
+    return opts
+
+
+def _classify_error(exc: Exception) -> dict:
+    message = str(exc)
+    lowered = message.lower()
+    if any(marker in lowered for marker in _BOT_CHECK_MARKERS):
+        return {"error": "bot_check", "detail": message}
+    if any(marker in lowered for marker in _UNAVAILABLE_MARKERS):
+        return {"error": "unavailable", "detail": message}
+    return {"error": "download_failed", "detail": message}
+
+
+def _build_track(entry: dict, fallback_title: str = "", source_url: str = "") -> dict | None:
+    """Map a finished yt-dlp entry onto a track dict, or None if no MP3 was produced."""
+    mp3_path = DOWNLOAD_DIR / f"{entry.get('id')}.mp3"
+    if not mp3_path.exists():
+        return None
+
+    return {
+        "title": entry.get("title") or fallback_title or "Audio trek",
+        "artist": entry.get("uploader") or entry.get("creator") or entry.get("channel") or "",
+        "duration": entry.get("duration") or 0,
+        "file_path": str(mp3_path),
+        "thumbnail": entry.get("thumbnail"),
+        "webpage_url": entry.get("webpage_url") or source_url,
+    }
+
+
+def _sync_search_and_download(query: str) -> dict:
+    """Search YouTube and download the first usable match. Runs in a worker thread."""
     try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Search YouTube for top 3 matches to allow fallback if #1 is unavailable
-            info = ydl.extract_info(f"ytsearch3:{query}", download=False)
-            if not info or not info.get("entries"):
-                return None
-            
-            for entry in info["entries"]:
-                if not entry:
-                    continue
-                duration = entry.get("duration") or 0
-                if duration > MAX_DURATION_SECONDS:
-                    continue
+        with yt_dlp.YoutubeDL(_base_ydl_opts()) as ydl:
+            info = ydl.extract_info(
+                f"ytsearch{SEARCH_CANDIDATE_COUNT}:{query}", download=False
+            )
+            entries = [entry for entry in (info or {}).get("entries") or [] if entry]
+            if not entries:
+                return {"error": "not_found", "detail": f"No search results for {query!r}"}
+
+            candidates = [
+                entry for entry in entries
+                if (entry.get("duration") or 0) <= MAX_DURATION_SECONDS
+            ]
+            if not candidates:
+                return {
+                    "error": "too_long",
+                    "detail": f"All {len(entries)} candidates exceed {MAX_DURATION_SECONDS}s",
+                }
+
+            last_detail = ""
+            for entry in candidates:
                 try:
                     ydl.process_ie_result(entry, download=True)
-                    video_id = entry.get("id")
-                    final_mp3_path = DOWNLOAD_DIR / f"{video_id}.mp3"
-                    
-                    if final_mp3_path.exists():
-                        title = entry.get("title", query)
-                        artist = entry.get("uploader") or entry.get("channel") or ""
-                        return {
-                            "title": title,
-                            "artist": artist,
-                            "duration": duration,
-                            "file_path": str(final_mp3_path),
-                            "thumbnail": entry.get("thumbnail"),
-                            "webpage_url": entry.get("webpage_url")
-                        }
                 except Exception as dl_err:
-                    logger.warning("Could not download candidate %s: %s", entry.get("id"), dl_err)
+                    last_detail = str(dl_err)
+                    logger.warning("Candidate %s failed: %s", entry.get("id"), dl_err)
                     continue
-            return None
-    except Exception as e:
-        logger.error("Error in yt-dlp download: %s", e, exc_info=True)
-        return None
 
-
-async def download_track_by_query(query: str) -> dict | None:
-    """
-    Search and download a track as MP3 asynchronously using yt-dlp.
-    """
-    return await asyncio.to_thread(_sync_search_and_download, query)
-
-def _sync_download_url(url: str) -> dict | None:
-    """
-    Download audio directly from a social media link (Instagram, TikTok, YouTube Shorts).
-    """
-    outtmpl = str(DOWNLOAD_DIR / "%(id)s.%(ext)s")
-    ydl_opts = {
-        "format": "bestaudio/best",
-        "outtmpl": outtmpl,
-        "postprocessors": [{
-            "key": "FFmpegExtractAudio",
-            "preferredcodec": "mp3",
-            "preferredquality": "192",
-        }],
-        "noplaylist": True,
-        "quiet": True,
-        "no_warnings": True,
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "ios", "mweb"]
-            }
-        },
-    }
-
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            if not info:
-                return None
-            
-            # If playlist/multi-item entry
-            if "entries" in info:
-                entry = info["entries"][0]
-            else:
-                entry = info
-
-            video_id = entry.get("id")
-            final_mp3_path = DOWNLOAD_DIR / f"{video_id}.mp3"
-            
-            title = entry.get("title") or "Audio Trek"
-            artist = entry.get("uploader") or entry.get("creator") or entry.get("channel") or ""
-            duration = entry.get("duration") or 0
+                track = _build_track(entry, fallback_title=query)
+                if track:
+                    return track
+                last_detail = f"No MP3 produced for {entry.get('id')}"
 
             return {
-                "title": title,
-                "artist": artist,
-                "duration": duration,
-                "file_path": str(final_mp3_path),
-                "thumbnail": entry.get("thumbnail"),
-                "webpage_url": entry.get("webpage_url") or url
+                "error": "download_failed",
+                "detail": last_detail or "No candidate could be downloaded",
             }
     except Exception as e:
-        logger.error("Error downloading social media audio: %s", e, exc_info=True)
-        return None
+        logger.error("yt-dlp search failed for %r: %s", query, e, exc_info=True)
+        return _classify_error(e)
 
-async def download_social_media_audio(url: str) -> dict | None:
-    """
-    Asynchronously download audio from social media link.
-    """
+
+def _sync_download_url(url: str) -> dict:
+    """Download audio straight from a link (YouTube, Instagram, TikTok). Runs in a worker thread."""
+    try:
+        with yt_dlp.YoutubeDL(_base_ydl_opts()) as ydl:
+            info = ydl.extract_info(url, download=True)
+            if not info:
+                return {"error": "download_failed", "detail": "yt-dlp returned no metadata"}
+
+            entries = [entry for entry in info.get("entries") or [] if entry]
+            entry = entries[0] if entries else info
+
+            track = _build_track(entry, source_url=url)
+            if not track:
+                return {
+                    "error": "download_failed",
+                    "detail": f"No MP3 produced for {entry.get('id')}",
+                }
+            return track
+    except Exception as e:
+        logger.error("yt-dlp URL download failed for %s: %s", url, e, exc_info=True)
+        return _classify_error(e)
+
+
+async def download_track_by_query(query: str) -> dict:
+    """Search and download a track as MP3. Returns a track dict or an error dict."""
+    return await asyncio.to_thread(_sync_search_and_download, query)
+
+
+async def download_social_media_audio(url: str) -> dict:
+    """Download audio from a direct link. Returns a track dict or an error dict."""
     return await asyncio.to_thread(_sync_download_url, url)
-

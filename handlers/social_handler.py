@@ -5,6 +5,7 @@ from aiogram import Router, types, F, Bot
 from aiogram.types import FSInputFile
 from aiogram.enums import ChatAction
 from services.download_service import download_social_media_audio
+from handlers.feedback import format_error
 from database import save_track, get_cached_track
 
 logger = logging.getLogger(__name__)
@@ -40,8 +41,8 @@ async def handle_social_media_link(message: types.Message, bot: Bot):
 
     try:
         result = await download_social_media_audio(url)
-        if not result or not result.get("file_path"):
-            await status_msg.edit_text("❌ Ushbu havoladan audioni ajratib olib bo‘lmadi. Havola ochiq (public) ekanligiga ishonch hosil qiling.")
+        if result.get("error"):
+            await status_msg.edit_text(format_error(result, message.from_user.id))
             return
 
         mp3_path = result["file_path"]

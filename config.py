@@ -26,3 +26,8 @@ ADMIN_IDS = [int(x.strip()) for x in raw_admins.split(",") if x.strip().isdigit(
 # Constraints
 # Default 15 minutes limit for downloaded tracks
 MAX_DURATION_SECONDS = int(os.getenv("MAX_DURATION_SECONDS", "900"))
+
+# yt-dlp network options. YouTube blocks datacenter IPs far more aggressively than
+# residential ones, so a cloud deployment may need cookies or an outbound proxy.
+YTDLP_COOKIES_FILE = os.getenv("YTDLP_COOKIES_FILE", "").strip()
+YTDLP_PROXY = os.getenv("YTDLP_PROXY", "").strip()
