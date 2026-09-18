@@ -1,13 +1,8 @@
 import asyncio
 import logging
 import yt_dlp
-from config import (
-    DOWNLOAD_DIR,
-    MAX_DURATION_SECONDS,
-    POT_PROVIDER_HOME,
-    YTDLP_COOKIES_FILE,
-    YTDLP_PROXY,
-)
+from config import DOWNLOAD_DIR, MAX_DURATION_SECONDS, POT_PROVIDER_HOME, YTDLP_PROXY
+from services.cookies import resolve_cookies_file
 
 logger = logging.getLogger(__name__)
 
@@ -44,8 +39,9 @@ def base_ydl_opts() -> dict:
         "no_warnings": True,
         "noprogress": True,
     }
-    if YTDLP_COOKIES_FILE:
-        opts = {**opts, "cookiefile": YTDLP_COOKIES_FILE}
+    cookies_file = resolve_cookies_file()
+    if cookies_file:
+        opts = {**opts, "cookiefile": cookies_file}
     if YTDLP_PROXY:
         opts = {**opts, "proxy": YTDLP_PROXY}
     if POT_PROVIDER_HOME:

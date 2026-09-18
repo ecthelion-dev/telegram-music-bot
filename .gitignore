@@ -1,4 +1,8 @@
 .env
+# Never commit a cookie jar: this repository is public and the jar is a live
+# Google session that anyone could reuse.
+cookies.txt
+*cookies*.txt
 venv/
 downloads/
 temp/
