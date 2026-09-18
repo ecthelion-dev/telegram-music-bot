@@ -8,6 +8,11 @@ logger = logging.getLogger(__name__)
 
 SEARCH_CANDIDATE_COUNT = 3
 
+# SoundCloud first: YouTube still serves search metadata from datacenter IPs but
+# refuses the player request needed to actually download. YouTube stays as a
+# fallback because its catalogue is the deeper of the two.
+SEARCH_PREFIXES = ("scsearch", "ytsearch")
+
 _BOT_CHECK_MARKERS = ("sign in to confirm", "not a bot", "confirm your age")
 _UNAVAILABLE_MARKERS = (
     "unavailable",
@@ -77,16 +82,16 @@ def _build_track(entry: dict, fallback_title: str = "", source_url: str = "") ->
     }
 
 
-def _sync_search_and_download(query: str) -> dict:
-    """Search YouTube and download the first usable match. Runs in a worker thread."""
+def _search_one_source(prefix: str, query: str) -> dict:
+    """Search a single catalogue and download its first usable hit."""
     try:
         with yt_dlp.YoutubeDL(base_ydl_opts()) as ydl:
             info = ydl.extract_info(
-                f"ytsearch{SEARCH_CANDIDATE_COUNT}:{query}", download=False
+                f"{prefix}{SEARCH_CANDIDATE_COUNT}:{query}", download=False
             )
             entries = [entry for entry in (info or {}).get("entries") or [] if entry]
             if not entries:
-                return {"error": "not_found", "detail": f"No search results for {query!r}"}
+                return {"error": "not_found", "detail": "natija yo‘q"}
 
             candidates = [
                 entry for entry in entries
@@ -95,7 +100,7 @@ def _sync_search_and_download(query: str) -> dict:
             if not candidates:
                 return {
                     "error": "too_long",
-                    "detail": f"All {len(entries)} candidates exceed {MAX_DURATION_SECONDS}s",
+                    "detail": f"{len(entries)} ta natija {MAX_DURATION_SECONDS}s dan uzun",
                 }
 
             last_detail = ""
@@ -104,7 +109,7 @@ def _sync_search_and_download(query: str) -> dict:
                     ydl.process_ie_result(entry, download=True)
                 except Exception as dl_err:
                     last_detail = str(dl_err)
-                    logger.warning("Candidate %s failed: %s", entry.get("id"), dl_err)
+                    logger.warning("%s candidate %s failed: %s", prefix, entry.get("id"), dl_err)
                     continue
 
                 track = _build_track(entry, fallback_title=query)
@@ -114,11 +119,28 @@ def _sync_search_and_download(query: str) -> dict:
 
             return {
                 "error": "download_failed",
-                "detail": last_detail or "No candidate could be downloaded",
+                "detail": last_detail or "hech biri yuklanmadi",
             }
     except Exception as e:
-        logger.error("yt-dlp search failed for %r: %s", query, e, exc_info=True)
+        logger.error("%s search failed for %r: %s", prefix, query, e, exc_info=True)
         return _classify_error(e)
+
+
+def _sync_search_and_download(query: str) -> dict:
+    """Try each catalogue in turn and return the first track that downloads."""
+    failures = []
+    for prefix in SEARCH_PREFIXES:
+        result = _search_one_source(prefix, query)
+        if not result.get("error"):
+            return result
+        failures.append(result)
+
+    details = " | ".join(f"{p}: {f['detail']}" for p, f in zip(SEARCH_PREFIXES, failures))
+    # A real failure is more actionable than "not found", which every source reports
+    # when it simply lacks the track.
+    blocking = [f for f in failures if f["error"] != "not_found"]
+    chosen = blocking[0] if blocking else failures[-1]
+    return {**chosen, "detail": details}
 
 
 def _sync_download_url(url: str) -> dict:
