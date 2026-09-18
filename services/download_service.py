@@ -88,44 +88,56 @@ def _build_track(entry: dict, fallback_title: str = "", source_url: str = "") ->
 
 
 def _search_one_source(prefix: str, query: str) -> dict:
-    """Search a single catalogue and download its first usable hit."""
+    """
+    Search a single catalogue and download its first usable hit.
+
+    The listing is flat and the hits are resolved one at a time: resolving the whole
+    candidate list up front costs a round trip per hit, and all but the first are
+    normally thrown away.
+    """
     try:
-        with yt_dlp.YoutubeDL(base_ydl_opts()) as ydl:
+        list_opts = {**base_ydl_opts(), "extract_flat": "in_playlist"}
+        with yt_dlp.YoutubeDL(list_opts) as ydl:
             info = ydl.extract_info(
                 f"{prefix}{SEARCH_CANDIDATE_COUNT}:{query}", download=False
             )
-            entries = [entry for entry in (info or {}).get("entries") or [] if entry]
-            if not entries:
-                return {"error": "not_found", "detail": "natija yo‘q"}
 
-            candidates = [
-                entry for entry in entries
-                if (entry.get("duration") or 0) <= MAX_DURATION_SECONDS
-            ]
-            if not candidates:
-                return {
-                    "error": "too_long",
-                    "detail": f"{len(entries)} ta natija {MAX_DURATION_SECONDS}s dan uzun",
-                }
+        entries = [entry for entry in (info or {}).get("entries") or [] if entry]
+        if not entries:
+            return {"error": "not_found", "detail": "natija yo‘q"}
 
-            last_detail = ""
+        candidates = [
+            entry for entry in entries
+            if (entry.get("duration") or 0) <= MAX_DURATION_SECONDS
+        ]
+        if not candidates:
+            return {
+                "error": "too_long",
+                "detail": f"{len(entries)} ta natija {MAX_DURATION_SECONDS}s dan uzun",
+            }
+
+        last_detail = ""
+        with yt_dlp.YoutubeDL(base_ydl_opts()) as ydl:
             for entry in candidates:
+                url = entry.get("url") or entry.get("webpage_url")
+                if not url:
+                    continue
                 try:
-                    ydl.process_ie_result(entry, download=True)
+                    resolved = ydl.extract_info(url, download=True)
                 except Exception as dl_err:
                     last_detail = str(dl_err)
                     logger.warning("%s candidate %s failed: %s", prefix, entry.get("id"), dl_err)
                     continue
 
-                track = _build_track(entry, fallback_title=query)
+                track = _build_track(resolved or {}, fallback_title=query)
                 if track:
                     return track
                 last_detail = f"No MP3 produced for {entry.get('id')}"
 
-            return {
-                "error": "download_failed",
-                "detail": last_detail or "hech biri yuklanmadi",
-            }
+        return {
+            "error": "download_failed",
+            "detail": last_detail or "hech biri yuklanmadi",
+        }
     except Exception as e:
         logger.error("%s search failed for %r: %s", prefix, query, e, exc_info=True)
         return _classify_error(e)
